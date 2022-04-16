@@ -1,12 +1,14 @@
-package main
+package block
 
 import (
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 	"time"
+	"utils"
 )
 
 const (
@@ -109,9 +111,36 @@ func (t *Transaction) Print() {
 	fmt.Printf(" value				%.1f\n", t.value)
 }
 
-func (bc *Blockchain) AddTransaction(sender string, recipient string, value float32) {
+func (bc *Blockchain) AddTransaction(sender string, recipient string, value float32,
+	senderPublicKey *ecdsa.PublicKey, s *utils.Signature) bool {
 	t := NewTransaction(sender, recipient, value)
-	bc.transactionPool = append(bc.transactionPool, t)
+
+	if sender == MINING_SENDER {
+		bc.transactionPool = append(bc.transactionPool, t)
+		return true
+	}
+
+	if bc.VerifyTransactionSignature(senderPublicKey, s, t) {
+		/*
+			if bc.CalculateTotalAmount(sender) < value {
+				log.Println("ERROR: Not enough balance in a wallet")
+				return false
+			}
+		*/
+		bc.transactionPool = append(bc.transactionPool, t)
+		return true
+	} else {
+		log.Println("ERROR: Verify Transaction")
+	}
+	return false
+}
+
+func (bc *Blockchain) VerifyTransactionSignature(
+	senderPublicKey *ecdsa.PublicKey, s *utils.Signature, t *Transaction) bool {
+	m, _ := json.Marshal(t)
+	h := sha256.Sum256([]byte(m))
+
+	return ecdsa.Verify(senderPublicKey, h[:], s.R, s.S)
 }
 
 func (bc *Blockchain) CopyTransactionPool() []*Transaction {
@@ -131,7 +160,7 @@ func (bc *Blockchain) ValidProof(nonce int, previousHash [32]byte, transactions 
 }
 
 func (bc *Blockchain) Mining() bool {
-	bc.AddTransaction(MINING_SENDER, bc.blockchainAddress, MINING_REWARD)
+	bc.AddTransaction(MINING_SENDER, bc.blockchainAddress, MINING_REWARD, nil, nil)
 	nonce := bc.ProofOfWork()
 	previousHash := bc.LastBlock().Hash()
 	bc.CreateBlock(nonce, previousHash)
@@ -139,7 +168,7 @@ func (bc *Blockchain) Mining() bool {
 	return true
 }
 
-func (bc *Blockchain) CaluculateTotalAmount(blockchainAddress string) float32 {
+func (bc *Blockchain) CalculateTotalAmount(blockchainAddress string) float32 {
 	var totalAmount float32 = 0.0
 	for _, b := range bc.chain {
 		for _, t := range b.transactions {
@@ -178,22 +207,22 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func main() {
-	my_blockchain_address := "my_blockchain_address"
+// func main() {
+// 	my_blockchain_address := "my_blockchain_address"
 
-	block_chain := NewBlockchain(my_blockchain_address)
-	block_chain.Print()
+// 	block_chain := NewBlockchain(my_blockchain_address)
+// 	block_chain.Print()
 
-	block_chain.AddTransaction("A", "B", 1.0)
-	block_chain.Mining()
-	block_chain.Print()
+// 	block_chain.AddTransaction("A", "B", 1.0)
+// 	block_chain.Mining()
+// 	block_chain.Print()
 
-	block_chain.AddTransaction("C", "D", 2.0)
-	block_chain.AddTransaction("E", "F", 3.0)
-	block_chain.Mining()
-	block_chain.Print()
+// 	block_chain.AddTransaction("C", "D", 2.0)
+// 	block_chain.AddTransaction("E", "F", 3.0)
+// 	block_chain.Mining()
+// 	block_chain.Print()
 
-	fmt.Printf("C %.1f\n", block_chain.CaluculateTotalAmount("C"))
-	fmt.Printf("D %.1f\n", block_chain.CaluculateTotalAmount("D"))
-	fmt.Printf("MY %.1f\n", block_chain.CaluculateTotalAmount("my_blockchain_address"))
-}
+// 	fmt.Printf("C %.1f\n", block_chain.CaluculateTotalAmount("C"))
+// 	fmt.Printf("D %.1f\n", block_chain.CaluculateTotalAmount("D"))
+// 	fmt.Printf("MY %.1f\n", block_chain.CaluculateTotalAmount("my_blockchain_address"))
+// }
